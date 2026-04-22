@@ -301,11 +301,16 @@ export default function App() {
 
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    const employeeData = {
+      ...newEmployee,
+      per_no: String(newEmployee.per_no || "").trim(),
+      email: String(newEmployee.email || "").trim(),
+    };
     try {
       const res = await fetch("/api/employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newEmployee),
+        body: JSON.stringify(employeeData),
       });
       if (res.ok) {
         setNewEmployee({});
@@ -411,8 +416,8 @@ export default function App() {
           }
 
           return {
-            per_no: String(row["Personnel Number"] || row["P-NO"] || row["Personnel No"] || row["Personnel-Number"] || ""),
-            gid: String(row["GID"] || row["G-ID"] || ""),
+            per_no: String(row["Personnel Number"] || row["P-NO"] || row["Personnel No"] || row["Personnel-Number"] || "").trim(),
+            gid: String(row["GID"] || row["G-ID"] || "").trim(),
             first_name: String(row["First Name"] || row["FIRST NAME"] || ""),
             last_name: String(row["Last Name"] || row["LAST NAME"] || ""),
             cost_center: String(row["Cost Center"] || row["COST CENTER"] || row["Cost Cente"] || ""),

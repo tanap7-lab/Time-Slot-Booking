@@ -7,6 +7,7 @@ import "dotenv/config";
 
 // Initialize Database
 const db = new Database("booking_system.db");
+db.pragma("foreign_keys = ON");
 
 // Schema Setup
 db.exec(`
@@ -64,9 +65,12 @@ async function startServer() {
 
   // Login
   app.post("/api/login", (req, res) => {
-    const { per_no, email } = req.body;
+    let { per_no, email } = req.body;
+    per_no = String(per_no || "").trim();
+    email = String(email || "").trim();
+    
     try {
-      const employee = db.prepare("SELECT * FROM employees WHERE per_no = ? AND email = ?").get(per_no, email) as any;
+      const employee = db.prepare("SELECT * FROM employees WHERE LOWER(TRIM(per_no)) = LOWER(?) AND LOWER(TRIM(email)) = LOWER(?)").get(per_no, email) as any;
       if (!employee) {
         return res.status(401).json({ error: "Invalid Credentials" });
       }
@@ -174,11 +178,16 @@ async function startServer() {
 
   // Bookings
   app.post("/api/bookings", (req, res) => {
-    const { per_no, slot_id } = req.body;
+    let { per_no, slot_id } = req.body;
+    per_no = String(per_no || "").trim();
+
     const transaction = db.transaction(() => {
       // Check if employee exists
-      const employee = db.prepare("SELECT * FROM employees WHERE per_no = ?").get(per_no);
+      const employee = db.prepare("SELECT * FROM employees WHERE LOWER(TRIM(per_no)) = LOWER(?)").get(per_no) as any;
       if (!employee) throw new Error("Employee not found");
+
+      // Use the actual per_no from DB for consistency
+      const dbPerNo = employee.per_no;
 
       // Check slot capacity
       const slot = db.prepare("SELECT * FROM time_slots WHERE slot_id = ?").get(slot_id) as any;
@@ -186,11 +195,11 @@ async function startServer() {
       if (slot.curr_bookings >= slot.max_capacity) throw new Error("Slot is full");
 
       // Strict Rule: One booking per employee
-      const existingAny = db.prepare("SELECT * FROM bookings WHERE per_no = ?").get(per_no);
+      const existingAny = db.prepare("SELECT * FROM bookings WHERE LOWER(TRIM(per_no)) = LOWER(?)").get(dbPerNo);
       if (existingAny) throw new Error("Employee already has an active booking. Please cancel it first.");
 
       // Record booking
-      db.prepare("INSERT INTO bookings (per_no, slot_id) VALUES (?, ?)").run(per_no, slot_id);
+      db.prepare("INSERT INTO bookings (per_no, slot_id) VALUES (?, ?)").run(dbPerNo, slot_id);
       db.prepare("UPDATE time_slots SET curr_bookings = curr_bookings + 1 WHERE slot_id = ?").run(slot_id);
     });
 
@@ -203,19 +212,33 @@ async function startServer() {
   });
 
   app.post("/api/bookings/cancel", (req, res) => {
-    const { per_no, slot_id } = req.body;
-    const transaction = db.transaction(() => {
-      const existing = db.prepare("SELECT * FROM bookings WHERE per_no = ? AND slot_id = ?").get(per_no, slot_id);
-      if (!existing) throw new Error("Booking not found");
-
-      db.prepare("DELETE FROM bookings WHERE per_no = ? AND slot_id = ?").run(per_no, slot_id);
-      db.prepare("UPDATE time_slots SET curr_bookings = curr_bookings - 1 WHERE slot_id = ?").run(slot_id);
-    });
-
+    let { per_no, slot_id } = req.body;
+    per_no = String(per_no || "").trim();
+    console.log(`[CANCEL] Attempting for per_no: ${per_no}, param slot_id: ${slot_id}`);
+    
     try {
+      const transaction = db.transaction(() => {
+        // Find the booking for this employee
+        const existing = db.prepare("SELECT * FROM bookings WHERE LOWER(TRIM(per_no)) = LOWER(?)").get(per_no) as any;
+        
+        if (!existing) {
+          console.warn(`[CANCEL] No booking found in DB for per_no: ${per_no}`);
+          throw new Error("No active booking found for this employee.");
+        }
+
+        console.log(`[CANCEL] Found booking for slot_id: ${existing.slot_id}`);
+
+        // Delete the booking
+        db.prepare("DELETE FROM bookings WHERE LOWER(TRIM(per_no)) = LOWER(?)").run(per_no);
+        
+        // Update slot occupancy
+        db.prepare("UPDATE time_slots SET curr_bookings = MAX(0, curr_bookings - 1) WHERE slot_id = ?").run(existing.slot_id);
+      });
+
       transaction();
       res.json({ success: true });
     } catch (err: any) {
+      console.error(`[CANCEL] Error: ${err.message}`);
       res.status(400).json({ error: err.message });
     }
   });
