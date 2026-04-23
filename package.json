@@ -3,12 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
     "start": "tsx server.ts",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

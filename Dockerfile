@@ -24,8 +24,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install only production dependencies
-# Note: tsx is needed if we run the server with it
-RUN npm install --omit=dev && npm install tsx
+RUN npm install --omit=dev
 
 # Copy built frontend
 COPY --from=builder /app/dist ./dist
@@ -35,10 +34,11 @@ COPY server.ts ./
 
 # Set environment variables
 ENV NODE_ENV=production
+# Note: Azure App Service will set its own PORT, but we provide a default
 ENV PORT=3000
 
-# Expose the port
+# Expose the port (informative for Azure)
 EXPOSE 3000
 
-# Start the application
-CMD ["npx", "tsx", "server.ts"]
+# Start the application using the start script defined in package.json
+CMD ["npm", "start"]
